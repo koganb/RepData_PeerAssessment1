@@ -10,16 +10,127 @@ output:
 
 
 
+
+```{r loaddata, cache=TRUE}
+data <- read.csv(unz("activity.zip", "activity.csv"))
+
+#remove NA values from steps 
+dataWOna <- subset(data, !is.na(data$steps))
+```
+
+
 ## What is mean total number of steps taken per day?
 
+####Histogram of the total number of steps taken each day
+```{r totalstepsnumber , fig.width=10, fig.height=7}
+library(ggplot2)
+
+m <- ggplot(dataWOna, aes(x=date))
+m <- m + geom_histogram(aes(weight = steps))
+m <- m + theme_classic()
+m <- m + theme(axis.text.x = element_text(angle = 90, hjust = 1))
+m <- m + labs(
+       x = "Dates",
+       y = "Steps Number",
+       title = "Total number of steps taken each day")
+m
+```
+
+####Mean and median total number of steps taken per day
+```{r mean_median}
+library(plyr)
+mean_median_steps <- ddply(dataWOna, .(date), summarise,
+               mean = mean(steps),
+               median = median(steps)
+               )
+
+print(mean_median_steps, row.names = FALSE)
+
+```
 
 
 ## What is the average daily activity pattern?
+```{r time_series_mean , fig.width=10, fig.height=7}
+mean_interval_steps <- ddply(dataWOna, .(interval), summarise,
+               mean_steps = mean(steps)
+               )
+max_mean_interval <- with(mean_interval_steps, interval[mean_steps == max(mean_steps)])
 
+l <- ggplot(mean_interval_steps, 
+       aes(interval, mean_steps))
+l <- l + geom_line() 
+l <- l + theme_classic()
+l <- l + xlab("Day interval") 
+l <- l + ylab("Mean steps")
+l
+```
+
+`r max_mean_interval` interval  on average across all the days in the dataset, contains the maximum number of steps
 
 
 ## Imputing missing values
+``` {r missing_values , fig.width=10, fig.height=7}
+na_rows <- nrow(data[is.na(data$steps),])
 
+
+df_mean <- merge(x = data, y = mean_interval_steps, by = "interval", all = TRUE)
+
+#set steps to interval mean 
+df_mean[is.na(df_mean$steps),]$steps <- df_mean[is.na(df_mean$steps),]$mean_steps 
+df_mean$mean_steps <- NULL
+
+
+#and combine dataset with mean and w/o mean
+dataWOna$df_type <- "missing ignored"
+df_mean$df_type <- "missing filled"
+
+combinedData <- rbind(dataWOna, df_mean)
+
+c <- ggplot(combinedData, aes(x=date, fill = df_type))
+c <- c + geom_histogram(aes(weight = steps), position="dodge")
+c <- c + theme_classic()
+c <- c + theme(axis.text.x = element_text(angle = 90, hjust = 1))
+c <- c + labs(
+       x = "Dates",
+       y = "Steps Number",
+       title = "Total number of steps taken each day")
+c <- c + theme(legend.position="bottom")
+c
+```
+
+
+
+#### The is no impact of imputing missing data except the dates that all the data was missing
 
 
 ## Are there differences in activity patterns between weekdays and weekends?
+
+```{r mean_median_steps_combined}
+mean_median_steps_combined <- merge (mean_median_steps,
+                ddply(df_mean, .(date), summarise, mean_wo_missing = mean(steps), median_wo_missing = median(steps)), 
+                by="date", all = TRUE)
+
+print(mean_median_steps_combined, row.names = FALSE)
+```
+
+```{r weekend, fig.width=10, fig.height=7}
+library(timeDate)
+
+df_mean$isWeekDay <- factor(isWeekday(as.POSIXct(df_mean$date, format="%Y-%m-%d"), wday = 1:5), levels=c(TRUE, FALSE), labels=c("weekday", "weekend"))
+
+
+df_mean_interval_steps <- ddply(df_mean, .(interval, isWeekDay), summarise,
+               mean_steps = mean(steps)
+               )
+
+l <- ggplot(df_mean_interval_steps, 
+       aes(interval, mean_steps))
+l <- l + geom_line() 
+l <- l + theme_classic()
+l <- l + xlab("Day interval") 
+l <- l + ylab("Mean steps")
+l <- l + facet_wrap(~isWeekDay, nrow = 2)
+l
+
+```
+
